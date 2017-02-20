@@ -12,6 +12,7 @@ else {
     while (<>) {
 	chomp;
 	s/\s//g;
+	if (!$_) { next; }
 	my $SHentry = get "https://unite.ut.ee/bl_forw_sh.php?sh_name=$_#fndtn-panel1";
 	my @SHentry = split /\n/, $SHentry;
 	if (@SHentry) {
@@ -36,7 +37,7 @@ else {
 	    }
 	    else {
 		print STDERR "Could not find link to sequence for $name.\n";
-		print $SHentry;
+		print STDERR $SHentry;
 	    }
 	    if ($sequence) {
 		chomp $sequence;
