@@ -3,6 +3,8 @@
 use strict;
 use LWP::Simple;
 
+binmode STDOUT, ":encoding(UTF-8)";
+
 if ($ARGV[-1] eq '-h' || $ARGV[-1] eq '--help') {
     print "This script downloads and outputs the representive sequence for a UNITE Species\n";
     print "Hypotheses (SH) in fasta format. The SH should be given in a file or through\n";
