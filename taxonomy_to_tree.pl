@@ -6,6 +6,8 @@ my $sep="\t";
 my $filename;
 my $INPUT = *STDIN;
 my $branch_length;
+my $mearge_taxon_on_single_branch = 'n';
+
 sub help {
     print "This script will make a phylogeny of a hirarchial taxonomy. Each terminal taxon\n";
     print "should be given on a row with the taxa it is nested in to its left. The\n";
@@ -19,6 +21,8 @@ sub help {
     print "-f/--file [file name]       will give the name of the input file (default:\n";
     print "                            STDIN)\n";
     print "-h/--help                   will print this help\n";
+    print "-m/--mearge_monotypic       will give one branch instead of a series of branches\n";
+    print "                            when taxa are monotypic\n";
     print "-s/--separator [string]     will give the separator between the ranks in the\n";
     print "                            hirarchy (default: tab [\\t])\n";
     exit;
@@ -41,6 +45,9 @@ for (my $i=0; $i < scalar @ARGV; ++ $i) {
 	    $filename = $ARGV[++$i];
 	}
 	else { die "--file/-f need a file name as next argument.\n"; }
+    }
+    if ($ARGV[$i] eq '-m'|| $ARGV[$i] eq '--mearge_monotypic') {
+	$mearge_taxon_on_single_branch = 'y';
     }
     elsif ( $ARGV[$i] eq '-h' || $ARGV[$i] eq '--help') {
 	&help();
@@ -72,22 +79,25 @@ while (my $row = <$INPUT>) {
 }
 # print tree
 #print "N branches from root: ", scalar keys %tree, ".\n";
-&print_hash_as_tree(\%tree,'',$branch_length);
+&print_hash_as_tree(\%tree,'',$branch_length,$mearge_taxon_on_single_branch);
 print ";\n";
 sub print_hash_as_tree {
     my $ref = shift;
     my $taxon = shift;
     my $branch_length = shift;
+    my $mearge_branches = shift;
     #print "$taxon\n";
     my @keys = keys %{$ref};
     if (scalar @keys) {
-	print '(';
+	if ($mearge_branches eq 'n' || scalar @keys > 1) { print '('; }
 	for (my $i=0; $i < scalar @keys; ++$i) {
 	    if ($i) { print ','; }
-	    &print_hash_as_tree(\%{$ref->{$keys[$i]}},$keys[$i],$branch_length);
+	    &print_hash_as_tree(\%{$ref->{$keys[$i]}},$keys[$i],$branch_length,$mearge_branches);
 	}
-	print ")$taxon";
-	if ($branch_length) { print ":$branch_length"; }
+	if ($mearge_branches eq 'n' || scalar @keys > 1) {
+	    print ")$taxon";
+	    if ($branch_length) { print ":$branch_length"; }
+	}
     }
     else { print $taxon; }
 }
