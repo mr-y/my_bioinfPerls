@@ -17,7 +17,13 @@ sub help {
     print "perl taxonomy_to_tree.pl [options] taxonomy_file.txt\n\n";
     print "Options:\n";
     print "-b/--branch_length [number] will give the length of each branch in the tree\n";
-    print "                            (default: no branch length)\n";
+    print "                            (default: no branch lengths). Alternatively it can\n";
+    print "                            take a file with the taxon name in the first column\n";
+    print "                            and the branch length in the second column. It is\n";
+    print "                            also possible to give a default branch length by\n";
+    print "                            giving default in the first column and the default\n";
+    print "                            branch length in the second. The column separator\n";
+    print "                            should be the same as for the taxonomy.\n";
     print "-f/--file [file name]       will give the name of the input file (default:\n";
     print "                            STDIN)\n";
     print "-h/--help                   will print this help\n";
@@ -46,7 +52,7 @@ for (my $i=0; $i < scalar @ARGV; ++ $i) {
 	}
 	else { die "--file/-f need a file name as next argument.\n"; }
     }
-    if ($ARGV[$i] eq '-m'|| $ARGV[$i] eq '--mearge_monotypic') {
+    elsif ($ARGV[$i] eq '-m'|| $ARGV[$i] eq '--mearge_monotypic') {
 	$mearge_taxon_on_single_branch = 'y';
     }
     elsif ( $ARGV[$i] eq '-h' || $ARGV[$i] eq '--help') {
@@ -68,6 +74,8 @@ while (my $row = <$INPUT>) {
     my @columns = split /$sep/, $row;
     my $hash_ref = \%tree;
     for (my $i=0; $i < scalar @columns; ++$i) {
+	$columns[$i] =~ s/^\s+//;
+	$columns[$i] =~ s/\s+$//;
 	if ($hash_ref->{$columns[$i]}) {
 	    $hash_ref = \%{$hash_ref->{$columns[$i]}};
 	}
@@ -77,27 +85,59 @@ while (my $row = <$INPUT>) {
 	}
     }
 }
+my %taxon_branches;
+if (defined($branch_length) && $branch_length =~ /\D/) {
+    print STDERR "Will read taxon branch lengths from file $branch_length.\n";
+    open LENGTHS, '<', $branch_length || die "Could not open $branch_length: $!.\n";
+    while (my $row = <LENGTHS>) {
+	if ($row =~ /^#/) { next; }
+	my @temp = split /$sep/, $row;
+	$temp[0] =~ s/^\s+//;
+	$temp[0] =~ s/\s+$//;
+	if ($temp[0] =~ /default/i) { $temp[0] = lc $temp[0]; }
+	if ($temp[0]) { $taxon_branches{$temp[0]} = $temp[1]; }
+    }
+    if (!defined($taxon_branches{'default'})) { $taxon_branches{'default'} = 0; }
+}
+else { $taxon_branches{'default'} = $branch_length; }
+$branch_length = \%taxon_branches;
+
 # print tree
-#print "N branches from root: ", scalar keys %tree, ".\n";
-&print_hash_as_tree(\%tree,'',$branch_length,$mearge_taxon_on_single_branch);
+# print "N branches from root: ", scalar keys %tree, ".\n";
+&print_hash_as_tree(\%tree,'',$branch_length,0,$mearge_taxon_on_single_branch);
 print ";\n";
 sub print_hash_as_tree {
     my $ref = shift;
     my $taxon = shift;
     my $branch_length = shift;
+    my $extra_branch_length = shift;
     my $mearge_branches = shift;
     #print "$taxon\n";
     my @keys = keys %{$ref};
     if (scalar @keys) {
+	my $add_branch_length=0;
 	if ($mearge_branches eq 'n' || scalar @keys > 1) { print '('; }
+	elsif (defined $branch_length) {
+	    if (defined($branch_length->{$taxon})) { $add_branch_length = $extra_branch_length + $branch_length->{$taxon}; }
+	    elsif ($branch_length && defined($branch_length->{'default'})) { $add_branch_length = $extra_branch_length + $branch_length->{'default'}; }
+	}
 	for (my $i=0; $i < scalar @keys; ++$i) {
 	    if ($i) { print ','; }
-	    &print_hash_as_tree(\%{$ref->{$keys[$i]}},$keys[$i],$branch_length,$mearge_branches);
+	    &print_hash_as_tree(\%{$ref->{$keys[$i]}},$keys[$i],$branch_length,$add_branch_length,$mearge_branches);
 	}
 	if ($mearge_branches eq 'n' || scalar @keys > 1) {
 	    print ")$taxon";
-	    if ($branch_length) { print ":$branch_length"; }
+	    if (defined($branch_length)) {
+		if (!defined($branch_length->{$taxon})) { $taxon = 'default'; }
+		print ':', $branch_length->{$taxon}+$extra_branch_length;
+	    }
 	}
     }
-    else { print $taxon; }
+    else {
+	print $taxon;
+	if (defined($branch_length)) {
+	    if (!defined($branch_length->{$taxon})) { $taxon = 'default'; }
+	    print ':', $branch_length->{$taxon}+$extra_branch_length;
+     	}
+    }
 }
