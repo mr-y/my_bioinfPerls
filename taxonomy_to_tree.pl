@@ -27,7 +27,7 @@ use strict;
 my $sep="\t";
 my $filename;
 my $INPUT = *STDIN;
-my $branch_length;
+my $branch_length = 60;
 my $mearge_taxon_on_single_branch = 'n';
 
 sub help {
@@ -38,14 +38,20 @@ sub help {
     print "starting with # will be ignored. Usage:\n\n";
     print "perl taxonomy_to_tree.pl [options] taxonomy_file.txt\n\n";
     print "Options:\n";
-    print "-b/--branch_length [number] will give the length of each branch in the tree\n";
-    print "                            (default: no branch lengths). Alternatively it can\n";
-    print "                            take a file with the taxon name in the first column\n";
-    print "                            and the branch length in the second column. It is\n";
-    print "                            also possible to give a default branch length by\n";
-    print "                            giving default in the first column and the default\n";
-    print "                            branch length in the second. The column separator\n";
-    print "                            should be the same as for the taxonomy.\n";
+    print "-b/--branch_length [number/ will give the length of each branch in the tree\n";
+    print "            no/file name/=] (default: 60). If no branch lengths are wanted give\n";
+    print "                            'no'. Alternatively, give a file with the taxon name\n";
+    print "                            in the first column and the branch length in the\n";
+    print "                            second column. It is also possible to give a default\n";
+    print "                            branch length by giving default in the first column\n";
+    print "                            and the default branch length in the second. The\n";
+    print "                            column separator should be the same as for the\n";
+    print "                            taxonomy. If the file is set to the same name as the\n";
+    print "                            taxonomy file (set by  -f or as last argument), or =\n";
+    print "                            is given, branch length will be expected to be in\n";
+    print "                            the column following the taxon in the taxon file,\n";
+    print "                            e.g. Basidiomycota,1,Agaricomycetes,2,Agaricus,2,\n";
+    print "                            Agaricus bisporus,1\n";
     print "-f/--file [file name]       will give the name of the input file (default:\n";
     print "                            STDIN)\n";
     print "-h/--help                   will print this help\n";
@@ -55,6 +61,8 @@ sub help {
     print "                            hirarchy (default: tab [\\t])\n";
     exit;
 }
+
+# Go through arguments to pars switches, files, etc
 for (my $i=0; $i < scalar @ARGV; ++ $i) {
     if ($ARGV[$i] eq '-s'|| $ARGV[$i] eq '--separator') {
 	if ($i+1 < scalar @ARGV && defined($ARGV[$i+1])) {
@@ -63,10 +71,11 @@ for (my $i=0; $i < scalar @ARGV; ++ $i) {
 	else { die "--separator/-s need a separator as next argument.\n"; }
     }
     elsif ($ARGV[$i] eq '-b' || $ARGV[$i] eq '--branch_length') {
-	if ($i+1 < scalar @ARGV && $ARGV[$i+1]=~ /^[^-]/) {
+	if ($i+1 < scalar @ARGV && !(!$filename && $i+2 == scalar @ARGV) && $ARGV[$i+1]=~ /^[^-]/) {
 	    $branch_length = $ARGV[++$i];
 	}
-	else { die "--branch_length/-b need a number as next argument.\n"; }
+	#else { $branch_length = 60; }
+	#else { die "--branch_length/-b need a number as next argument.\n"; }
     }
     elsif ($ARGV[$i] eq '-f' || $ARGV[$i] eq '--file') {
 	if ($i+1 < scalar @ARGV && $ARGV[$i+1]=~ /^[^-]/) {
@@ -85,11 +94,22 @@ for (my $i=0; $i < scalar @ARGV; ++ $i) {
     }
     else { die "Do not recognize argument $ARGV[$i].\n"; }
 }
+# Take care of special cases of branch lengths
+if (defined($branch_length) && $branch_length =~ /^no$/i) { undef $branch_length; }
+if (defined($branch_length) && $filename && $branch_length eq $filename) { $branch_length = '='; }
+
+# If filename given open file (otherwise expect input from STDIN)
 if ($filename) {
     open $INPUT, '<', $filename or die "Could not open $filename: $!.\n";
 }
-my %tree;
-# pars file
+else {
+    print STDERR "Expecting taxonomy through standard in.\n";
+}
+
+my %tree; # Save taxonomy as a tree based on a hash structure
+my %taxon_branches; # Save branch lengths for the taxa
+
+# Pars file
 while (my $row = <$INPUT>) {
     chomp $row;
     if ($row =~ /^#/) { next; }
@@ -105,61 +125,80 @@ while (my $row = <$INPUT>) {
 	    $hash_ref->{$columns[$i]} = {};
 	    $hash_ref = \%{$hash_ref->{$columns[$i]}};
 	}
+	if (defined($branch_length) && $branch_length eq '=') { # If parsing branch lengths from same file
+	    if (defined($columns[$i+1])) {
+		if ($columns[$i+1] =~ /\D/) { print STDERR "WARNING!!! Branch length $columns[$i+1] for $columns[$i] contains non numeric value.\n"; }
+		$taxon_branches{$columns[$i]} = $columns[$i+1];
+	    }
+	    ++$i;
+	}
     }
 }
-my %taxon_branches;
-if (defined($branch_length) && $branch_length =~ /\D/) {
+
+# If branch lengths and branch lengths not number or parsed in taxonomy file
+# treat it as a file and pars it, otherwise if defined and not parsed in
+# taxonomy file treat it as a number
+if (defined($branch_length) && $branch_length =~ /\D/ && $branch_length ne '=') {
     print STDERR "Will read taxon branch lengths from file $branch_length.\n";
     open LENGTHS, '<', $branch_length || die "Could not open $branch_length: $!.\n";
     while (my $row = <LENGTHS>) {
-	if ($row =~ /^#/) { next; }
+	if ($row =~ /^#/) { next; } # If starting with a hash treat it as a comment
 	my @temp = split /$sep/, $row;
 	$temp[0] =~ s/^\s+//;
 	$temp[0] =~ s/\s+$//;
 	if ($temp[0] =~ /default/i) { $temp[0] = lc $temp[0]; }
 	if ($temp[0]) { $taxon_branches{$temp[0]} = $temp[1]; }
     }
-    if (!defined($taxon_branches{'default'})) { $taxon_branches{'default'} = 0; }
 }
-else { $taxon_branches{'default'} = $branch_length; }
-$branch_length = \%taxon_branches;
+elsif (defined($branch_length) && $branch_length ne '=') { $taxon_branches{'default'} = $branch_length; }
+
+# If branch lengths and no default given, set default to 0
+if (defined($branch_length) && !defined($taxon_branches{'default'})) { $taxon_branches{'default'} = 0; }
+
+# $branch_length = \%taxon_branches;
 
 # print tree
 # print "N branches from root: ", scalar keys %tree, ".\n";
-&print_hash_as_tree(\%tree,'',$branch_length,0,$mearge_taxon_on_single_branch);
+&print_hash_as_tree(\%tree, '', \%taxon_branches, 0, $mearge_taxon_on_single_branch);
 print ";\n";
 sub print_hash_as_tree {
-    my $ref = shift;
-    my $taxon = shift;
-    my $branch_length = shift;
-    my $extra_branch_length = shift;
-    my $mearge_branches = shift;
+    my $ref = shift; # reference to tree based on hash references
+    my $taxon = shift; # the taxon being treated
+    my $branch_length = shift; # hash ref to branch lengths for the different taxa
+    my $extra_branch_length = shift; # branch length not yet printed due to monotypic taxa
+    my $mearge_branches = shift; # Should monotypic taxa be kept on one branch?
     #print "$taxon\n";
+    # For each descendant taxon
     my @keys = keys %{$ref};
-    if (scalar @keys) {
+    if (scalar @keys) { # If any descendants
 	my $add_branch_length=0;
-	if ($mearge_branches eq 'n' || scalar @keys > 1) { print '('; }
-	elsif (defined $branch_length) {
-	    if (defined($branch_length->{$taxon})) { $add_branch_length = $extra_branch_length + $branch_length->{$taxon}; }
-	    elsif ($branch_length && defined($branch_length->{'default'})) { $add_branch_length = $extra_branch_length + $branch_length->{'default'}; }
+	if ($mearge_branches eq 'n' || scalar @keys > 1) { print '('; } # Unless monotypic and should be merged
+	elsif (scalar keys %$branch_length > 0) { # Otherwise prepare to send branch length (if any) to descendant taxa
+	    my $name = $taxon;
+	    if (!defined($branch_length->{$taxon})) { $name = 'default'; }
+	    if (defined($branch_length->{$name}) && !($branch_length->{$name} =~ /\D/)) {
+		$add_branch_length = $extra_branch_length + $branch_length->{$name};
+	    }
 	}
-	for (my $i=0; $i < scalar @keys; ++$i) {
+	for (my $i=0; $i < scalar @keys; ++$i) { # Treat descendants
 	    if ($i) { print ','; }
 	    &print_hash_as_tree(\%{$ref->{$keys[$i]}},$keys[$i],$branch_length,$add_branch_length,$mearge_branches);
 	}
-	if ($mearge_branches eq 'n' || scalar @keys > 1) {
+	if ($mearge_branches eq 'n' || scalar @keys > 1) { # Unless monotypic and should be merged
 	    print ")$taxon";
-	    if (defined($branch_length)) {
-		if (!defined($branch_length->{$taxon})) { $taxon = 'default'; }
-		print ':', $branch_length->{$taxon}+$extra_branch_length;
+	    if (defined($branch_length) && (scalar keys %$branch_length > 0)) { # If branch lengths
+		if (!defined($branch_length->{$taxon})) { $taxon = 'default'; } # If default should be used
+		if ($branch_length->{$taxon} =~ /\D/) { print ':', $branch_length->{$taxon}; } # If branch lengths not numeric
+		else { print ':', $branch_length->{$taxon}+$extra_branch_length; }
 	    }
 	}
     }
-    else {
+    else { # If tip
 	print $taxon;
-	if (defined($branch_length)) {
-	    if (!defined($branch_length->{$taxon})) { $taxon = 'default'; }
-	    print ':', $branch_length->{$taxon}+$extra_branch_length;
+	if (defined($branch_length) && (scalar keys %$branch_length > 0)) { # If branch lengths
+	    if (!defined($branch_length->{$taxon})) { $taxon = 'default'; } # If default should be used
+	    if ($branch_length->{$taxon} =~ /\D/) { print ':', $branch_length->{$taxon}; } # If branch lengths not numeric
+	    else { print ':', $branch_length->{$taxon}+$extra_branch_length; }
      	}
     }
 }
