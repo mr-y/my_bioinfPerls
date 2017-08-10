@@ -9,7 +9,9 @@ my $sep = "\t";
 
 sub help {
     print "This script will print the rows in a table (given by -t/--table) where the first\n";
-    print "column is present as a name in a fasta file (given by -f/--fasta). E.g:\n\n";
+    print "column is present as a name in a fasta file (given by -f/--fasta). The\n";
+    print "character(s) separating the columns in the table can be given by -s/--separator\n";
+    print "(default tab/\\t). E.g:\n\n";
     print "perl get_rows_for_taxa_in_fst.pl -f my.fst -t my.tab\n\n";
     exit;
 }
