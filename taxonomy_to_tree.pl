@@ -27,7 +27,7 @@ use strict;
 my $sep="\t";
 my $filename;
 my $INPUT = *STDIN;
-my $branch_length = 60;
+my $branch_length = 360;
 my $mearge_taxon_on_single_branch = 'n';
 
 sub help {
