@@ -39,7 +39,7 @@ sub help {
     print "perl taxonomy_to_tree.pl [options] taxonomy_file.txt\n\n";
     print "Options:\n";
     print "-b/--branch_length [number/ will give the length of each branch in the tree\n";
-    print "            no/file name/=] (default: 60). If no branch lengths are wanted give\n";
+    print "            no/file name/=] (default: 360). If no branch lengths are wanted give\n";
     print "                            'no'. Alternatively, give a file with the taxon name\n";
     print "                            in the first column and the branch length in the\n";
     print "                            second column. It is also possible to give a default\n";
